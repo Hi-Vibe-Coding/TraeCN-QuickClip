@@ -37,41 +37,41 @@ public static class Win32Clipboard {
 }
 "@
 
-$lastSeq = [Win32Clipboard]::GetClipboardSequenceNumber()
+$lastSeq = 0
+try { $lastSeq = [Win32Clipboard]::GetClipboardSequenceNumber() } catch { }
 
 while ($true) {
     try {
         $seq = [Win32Clipboard]::GetClipboardSequenceNumber()
+
+        if ($seq -ne $lastSeq) {
+            $lastSeq = $seq
+
+            # 读取最新图片（带重试，应对剪贴板被浏览器短暂占用）
+            $img = $null
+            for ($t = 0; $t -lt 5; $t++) {
+                try {
+                    if ([System.Windows.Clipboard]::ContainsImage()) {
+                        $img = [System.Windows.Clipboard]::GetImage()
+                    }
+                    break
+                }
+                catch { Start-Sleep -Milliseconds 100 }
+            }
+
+            if ($null -ne $img) {
+                $n = (Get-ChildItem -LiteralPath $staging -Filter *.png -ErrorAction SilentlyContinue).Count + 1
+                $path = Join-Path $staging ("{0:d5}.png" -f $n)
+                $encoder = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
+                $frame   = [System.Windows.Media.Imaging.BitmapFrame]::Create($img)
+                $encoder.Frames.Add($frame)
+                $stream  = [System.IO.File]::Create($path)
+                try { $encoder.Save($stream) } finally { $stream.Close() }
+            }
+        }
     }
     catch {
-        Start-Sleep -Milliseconds 300
-        continue
-    }
-
-    if ($seq -ne $lastSeq) {
-        $lastSeq = $seq
-
-        # 读取最新图片（带重试，应对剪贴板被浏览器短暂占用）
-        $img = $null
-        for ($t = 0; $t -lt 5; $t++) {
-            try {
-                if ([System.Windows.Clipboard]::ContainsImage()) {
-                    $img = [System.Windows.Clipboard]::GetImage()
-                }
-                break
-            }
-            catch { Start-Sleep -Milliseconds 100 }
-        }
-
-        if ($null -ne $img) {
-            $n = (Get-ChildItem -LiteralPath $staging -Filter *.png -ErrorAction SilentlyContinue).Count + 1
-            $path = Join-Path $staging ("{0:d5}.png" -f $n)
-            $encoder = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
-            $frame   = [System.Windows.Media.Imaging.BitmapFrame]::Create($img)
-            $encoder.Frames.Add($frame)
-            $stream  = [System.IO.File]::Create($path)
-            try { $encoder.Save($stream) } finally { $stream.Close() }
-        }
+        # 任一步出错（读剪贴板 / PNG 编码 / 落盘）都不终止收集器，睡一觉后继续监听
     }
 
     Start-Sleep -Milliseconds 200
