@@ -23,17 +23,49 @@ if (-not (Test-Path -LiteralPath $OutDir)) {
 $files = @(Get-ChildItem -LiteralPath $staging -Filter *.png -ErrorAction SilentlyContinue | Sort-Object Name)
 
 if ($files.Count -eq 0) {
-    if (-not $Silent) {
-        Add-Type -AssemblyName System.Windows.Forms
-        [void][System.Windows.Forms.MessageBox]::Show(
-            "待存区没有图片，请先复制图片（复制后会自动收集）。",
-            "QuickClip",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Warning,
-            [System.Windows.Forms.MessageBoxDefaultButton]::Button1,
-            [System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly
-        )
+    # 待存区为空：先尝试直接读剪贴板（兜底，例如收集器未运行、或尚未收集到图片时）
+    Add-Type -AssemblyName PresentationCore
+    $img = $null
+    for ($t = 0; $t -lt 5; $t++) {
+        try {
+            if ([System.Windows.Clipboard]::ContainsImage()) {
+                $img = [System.Windows.Clipboard]::GetImage()
+            }
+            break
+        }
+        catch { Start-Sleep -Milliseconds 100 }
     }
+
+    if ($null -ne $img) {
+        # 剪贴板里有图，直接保存单张
+        $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+        $name  = "图片_${stamp}-01.png"
+        $dest  = Join-Path $OutDir $name
+        $j = 2
+        while (Test-Path -LiteralPath $dest) {
+            $name = "图片_${stamp}-01_$j.png"
+            $dest = Join-Path $OutDir $name
+            $j++
+        }
+        $encoder = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
+        $frame   = [System.Windows.Media.Imaging.BitmapFrame]::Create($img)
+        $encoder.Frames.Add($frame)
+        $stream  = [System.IO.File]::Create($dest)
+        try { $encoder.Save($stream) } finally { $stream.Close() }
+        try { [System.Windows.Clipboard]::Clear() } catch { }
+        exit 0
+    }
+
+    # 剪贴板里也没有图片 -> 弹出提示
+    Add-Type -AssemblyName System.Windows.Forms
+    [void][System.Windows.Forms.MessageBox]::Show(
+        "当前剪切板没有图片",
+        "QuickClip",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Warning,
+        [System.Windows.Forms.MessageBoxDefaultButton]::Button1,
+        [System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly
+    )
     exit 0
 }
 

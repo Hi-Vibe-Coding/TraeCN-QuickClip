@@ -7,6 +7,15 @@
 # ============================================================
 
 $ErrorActionPreference = "Stop"
+
+# ---------- 单实例保护：避免重复启动收集器导致图片被重复收藏 ----------
+$createdNew = $false
+$mutex = New-Object System.Threading.Mutex($true, "QuickClip_Collector_Singleton", [ref]$createdNew)
+if (-not $createdNew) {
+    # 已有收集器在运行，直接退出，不再重复监听
+    exit 0
+}
+
 Add-Type -AssemblyName PresentationCore
 
 $baseDir = Join-Path $env:LOCALAPPDATA "QuickClip"
