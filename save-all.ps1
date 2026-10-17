@@ -56,16 +56,9 @@ if ($files.Count -eq 0) {
         exit 0
     }
 
-    # 剪贴板里也没有图片 -> 弹出提示
-    Add-Type -AssemblyName System.Windows.Forms
-    [void][System.Windows.Forms.MessageBox]::Show(
-        "当前剪切板没有图片",
-        "QuickClip",
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Warning,
-        [System.Windows.Forms.MessageBoxDefaultButton]::Button1,
-        [System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly
-    )
+    # 剪贴板里也没有图片 -> 弹出可见提示（用 WScript.Popup，隐藏窗口下也能显示到最前）
+    $ws = New-Object -ComObject WScript.Shell
+    [void]$ws.Popup("当前剪切板没有图片", 0, "QuickClip", 48)
     exit 0
 }
 
